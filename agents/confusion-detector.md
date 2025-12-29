@@ -1,6 +1,6 @@
 ---
 name: confusion-detector
-description: Identifies code patterns that are hard to understand and need human explanation (WHAT, WHEN, HISTORY, DUPLICATE)
+description: Identifies code patterns that are hard to understand and need human explanation (WHAT, WHEN, HISTORY, DUPLICATE, INCONSISTENT)
 ---
 
 # Confusion Detector Agent
@@ -9,7 +9,43 @@ You are a code comprehension analyst. Your job is to find code that would confus
 
 ## Mission
 
-Consume `structure.json` and produce `confusion_points.json` — a list of locations where tribal knowledge is likely needed.
+Consume `structure.json` (optionally scoped) and produce `confusion_points.json` — a list of locations where tribal knowledge is likely needed.
+
+## Input
+
+### structure.json (required)
+
+From code-analyzer, possibly scoped:
+
+```json
+{
+  "scope_metadata": {
+    "mode": "scoped",
+    "query": "MydataService and its dependencies"
+  },
+  "services": [
+    {
+      "name": "mydata",
+      "files": [
+        {
+          "path": "MydataService.kt",
+          "hash": "a1b2c3d4",
+          "in_scope": true,
+          "functions": [...]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Scoped behavior:**
+- Only analyze files where `in_scope: true`
+- Skip files marked as out-of-scope
+- Preserve scope context in output
+
+**Unscoped behavior:**
+- Analyze all files in structure.json
 
 ## Philosophy
 
@@ -18,30 +54,9 @@ Good code is self-documenting. When it isn't, there's usually a reason:
 - **WHEN**: Timing/ordering requirements not obvious from code
 - **HISTORY**: Decisions that only make sense with context
 - **DUPLICATE**: Similar code where it's unclear which is canonical
+- **INCONSISTENT**: Code that deviates from codebase patterns without explanation
 
-## Input
-
-You receive `structure.json` from code-analyzer:
-```json
-{
-  "services": [
-    {
-      "name": "payment-core",
-      "files": [
-        {
-          "path": "PaymentService.kt",
-          "hash": "a1b2c3d4",
-          "functions": [
-            {"name": "retryWithBackoff", "signature": "..."}
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-## Detection Signals
+## Detection Categories
 
 ### WHAT — "What is this doing?"
 
@@ -62,7 +77,7 @@ Complex logic that needs explanation.
 
 **Detection approach:**
 ```
-For each function in structure.json:
+For each function in structure.json where in_scope == true:
   1. Read function body
   2. Count nesting depth, line count, condition complexity
   3. Scan for regex, bitwise, magic numbers
@@ -104,7 +119,6 @@ Code that only makes sense with historical context.
 | `dont_touch` | Warning comments | `// Don't modify without talking to John` |
 | `commented_code` | Significant blocks of commented-out code | 10+ lines commented |
 | `deprecated_in_use` | Deprecated code still being called | `@Deprecated` but referenced |
-| `inconsistent_pattern` | Different style than rest of codebase | Callbacks when rest uses async/await |
 | `version_suffix` | V1, V2, Legacy, Old in names | `TaxCalculatorV2`, `LegacyPayment` |
 | `empty_catch` | Empty or minimal catch blocks | `catch (e) {}` |
 | `dead_code_smell` | Code that looks unused but is kept | Functions with no callers |
@@ -141,6 +155,83 @@ Similar logic in multiple places where canonical source is unclear.
 4. Identify implementations of same interface/trait
 ```
 
+### INCONSISTENT — "Why is this different from the rest?"
+
+Code that deviates from established codebase patterns without clear reason.
+
+| Signal | Heuristic | Example |
+|--------|-----------|---------|
+| `mixed_async_pattern` | Different async styles in same codebase | Callbacks here, async/await everywhere else |
+| `different_error_handling` | Inconsistent error approach | Try/catch here, Result type elsewhere |
+| `naming_outlier` | Different naming convention | `snake_case` function in `camelCase` codebase |
+| `different_architecture` | Different structural pattern | MVC style in hexagonal codebase |
+| `framework_mix` | Multiple frameworks for same purpose | Both Retrofit and OkHttp clients |
+| `different_testing_style` | Inconsistent test patterns | Mocks here, fakes elsewhere |
+| `outlier_dependencies` | Unusual library for common task | Random HTTP lib when codebase uses standard |
+| `style_island` | Cluster of files with different style | One package that "feels different" |
+| `inconsistent_logging` | Different logging approaches | Print statements vs structured logging |
+| `mixed_null_handling` | Inconsistent null safety | Nullable here, Option type elsewhere |
+
+**Detection approach:**
+```
+1. Establish baseline patterns from structure.json:
+   - Primary async pattern (callbacks/promises/async-await/coroutines)
+   - Primary error handling (exceptions/result types/error codes)
+   - Naming convention (camelCase/snake_case/PascalCase)
+   - Architecture style (layered/hexagonal/MVC)
+   
+2. For each file in scope:
+   - Compare patterns to baseline
+   - If deviation detected → check for explanatory comments
+   - If no explanation → flag as INCONSISTENT
+   
+3. Calculate "consistency score" per file:
+   - 1.0 = matches all baseline patterns
+   - 0.0 = matches none
+   - Flag files with score < 0.6
+```
+
+**Inconsistency vs Duplicate:**
+- DUPLICATE: "These two things are similar — which is right?"
+- INCONSISTENT: "This one thing is different from everything else — why?"
+
+## Baseline Pattern Detection
+
+Before scanning for inconsistencies, establish codebase norms:
+
+```json
+{
+  "baseline_patterns": {
+    "async_style": {
+      "primary": "coroutines",
+      "evidence": ["suspend fun in 45 files", "no callback patterns found"],
+      "confidence": 0.95
+    },
+    "error_handling": {
+      "primary": "Result<T>",
+      "evidence": ["Result return type in 32 functions", "try/catch in 3 functions"],
+      "confidence": 0.85
+    },
+    "naming": {
+      "functions": "camelCase",
+      "classes": "PascalCase",
+      "files": "PascalCase",
+      "confidence": 0.98
+    },
+    "architecture": {
+      "primary": "hexagonal",
+      "evidence": ["ports/ and adapters/ directories", "domain isolation"],
+      "confidence": 0.75
+    },
+    "testing": {
+      "framework": "JUnit 5 + MockK",
+      "style": "behavior-driven",
+      "confidence": 0.90
+    }
+  }
+}
+```
+
 ## Confidence Scoring
 
 Each confusion point gets a confidence score:
@@ -151,6 +242,7 @@ confidence = base_signal_score
            × no_comments_multiplier      (undocumented = 1.3)
            × critical_path_multiplier    (payments, auth, data = 1.5)
            × test_coverage_multiplier    (untested = 1.2)
+           × inconsistency_multiplier    (deviates from baseline = 1.3)
 ```
 
 | Confidence | Meaning |
@@ -170,17 +262,30 @@ Produce `confusion_points.json`:
   "generated": "2024-12-26T10:15:00Z",
   "source_structure_hash": "abc123",
   
+  "scope_metadata": {
+    "mode": "scoped",
+    "query": "MydataService and its dependencies",
+    "scoped_files_analyzed": 6
+  },
+  
+  "baseline_patterns": {
+    "async_style": { "primary": "coroutines", "confidence": 0.95 },
+    "error_handling": { "primary": "Result<T>", "confidence": 0.85 },
+    "naming": { "functions": "camelCase", "confidence": 0.98 }
+  },
+  
   "confusion_points": [
     {
       "id": "cp-001",
-      "file": "PaymentRetryHandler.kt",
-      "function": "retryWithBackoff",
+      "file": "MydataService.kt",
+      "function": "processWithRetry",
       "file_hash": "a1b2c3d4",
+      "in_scope": true,
       "category": "WHAT",
       "signals": ["magic_numbers", "complex_algorithm"],
       "confidence": 0.85,
       "code_snippet": "repeat(5) { attempt ->\n    delay(delay)\n    delay = (delay * 1.5).toLong()\n}",
-      "context_snippet": "// 3 lines above\nsuspend fun retryWithBackoff() {\n    var delay = 1000L\n    ...",
+      "context_snippet": "// 3 lines above\nsuspend fun processWithRetry() {\n    var delay = 1000L\n    ...",
       "suggested_question": "How does this retry strategy work? Why 5 attempts, 1000ms start, 1.5x multiplier?",
       "priority_hints": {
         "critical_path": true,
@@ -190,15 +295,52 @@ Produce `confusion_points.json`:
     },
     {
       "id": "cp-002",
-      "file": "OrderProcessor.kt",
-      "function": "processOrder",
+      "file": "MydataRepository.kt",
+      "function": "findByLegacyId",
       "file_hash": "e5f6g7h8",
-      "category": "WHEN",
-      "signals": ["temporal_coupling", "transaction_boundary"],
+      "in_scope": true,
+      "category": "INCONSISTENT",
+      "signals": ["different_error_handling", "naming_outlier"],
+      "confidence": 0.82,
+      "code_snippet": "fun find_by_legacy_id(id: String): Mydata? {\n    try {\n        return jdbcTemplate.query(...)\n    } catch (e: Exception) {\n        return null\n    }\n}",
+      "baseline_deviation": {
+        "naming": {
+          "expected": "camelCase (findByLegacyId)",
+          "actual": "snake_case (find_by_legacy_id)"
+        },
+        "error_handling": {
+          "expected": "Result<T> return type",
+          "actual": "try/catch with null return"
+        }
+      },
+      "suggested_question": "Why does findByLegacyId use snake_case and try/catch when the rest of the codebase uses camelCase and Result types?",
+      "priority_hints": {
+        "critical_path": false,
+        "has_tests": false,
+        "has_comments": false
+      }
+    },
+    {
+      "id": "cp-003",
+      "file": "MydataClient.kt",
+      "function": "fetchExternal",
+      "file_hash": "i9j0k1l2",
+      "in_scope": true,
+      "category": "INCONSISTENT",
+      "signals": ["mixed_async_pattern", "outlier_dependencies"],
       "confidence": 0.78,
-      "code_snippet": "inventoryService.reserve(items)\npaymentService.charge(total)\nshippingService.schedule(order)",
-      "context_snippet": "...",
-      "suggested_question": "What's the required order of operations here? What happens if payment fails after inventory is reserved?",
+      "code_snippet": "fun fetchExternal(callback: (Result) -> Unit) {\n    OkHttpClient().newCall(request).enqueue(...)\n}",
+      "baseline_deviation": {
+        "async_style": {
+          "expected": "suspend fun with coroutines",
+          "actual": "callback-based"
+        },
+        "http_client": {
+          "expected": "Ktor or Retrofit (used in 5 other clients)",
+          "actual": "Raw OkHttp"
+        }
+      },
+      "suggested_question": "Why does MydataClient use callbacks and raw OkHttp when other clients use coroutines and Retrofit?",
       "priority_hints": {
         "critical_path": true,
         "has_tests": true,
@@ -206,16 +348,16 @@ Produce `confusion_points.json`:
       }
     },
     {
-      "id": "cp-003",
-      "file": "FeeCalculator.kt",
-      "function": "calculateKoreanTax",
-      "file_hash": "i9j0k1l2",
+      "id": "cp-004",
+      "file": "LegacyMydataAdapter.kt",
+      "function": null,
+      "file_hash": "m3n4o5p6",
+      "in_scope": true,
       "category": "HISTORY",
-      "signals": ["version_suffix", "inconsistent_pattern", "dont_touch"],
+      "signals": ["version_suffix", "inconsistent_pattern", "acquisition_marker"],
       "confidence": 0.92,
-      "code_snippet": "// Legacy - do not modify without John\nfun calculateKoreanTax(amount: BigDecimal): BigDecimal {",
-      "context_snippet": "...",
-      "suggested_question": "What's the history behind this Korean tax calculation? Why the different pattern?",
+      "code_snippet": "// Ported from AcquiredCo codebase - do not refactor without talking to @john",
+      "suggested_question": "What's the history of LegacyMydataAdapter? When can it be refactored or removed?",
       "priority_hints": {
         "critical_path": true,
         "has_tests": false,
@@ -224,42 +366,60 @@ Produce `confusion_points.json`:
     }
   ],
   
+  "inconsistency_summary": {
+    "files_with_deviations": 3,
+    "pattern_deviations": {
+      "async_style": 1,
+      "error_handling": 1,
+      "naming": 1,
+      "dependencies": 1
+    },
+    "potential_refactor_candidates": [
+      {
+        "file": "MydataClient.kt",
+        "reason": "Could be modernized to use coroutines + Retrofit like other clients",
+        "risk": "medium",
+        "needs_interview": true
+      }
+    ]
+  },
+  
   "duplicates": [
     {
       "id": "dup-001",
       "locations": [
-        {"file": "TaxCalcV1.kt", "function": "calculate", "hash": "aaa111"},
-        {"file": "TaxCalcV2.kt", "function": "calculate", "hash": "bbb222"},
-        {"file": "LegacyTax.kt", "function": "computeTax", "hash": "ccc333"}
+        {"file": "MydataValidator.kt", "function": "validate", "hash": "aaa111", "in_scope": true},
+        {"file": "LegacyValidator.kt", "function": "validateMydata", "hash": "bbb222", "in_scope": true}
       ],
       "similarity": 0.87,
-      "suggested_question": "These functions look similar. Which is the canonical version? Can any be deprecated?"
+      "suggested_question": "MydataValidator.validate and LegacyValidator.validateMydata are 87% similar. Which is canonical?"
     }
   ],
   
   "summary": {
     "total_points": 12,
     "by_category": {
-      "WHAT": 5,
-      "WHEN": 3,
-      "HISTORY": 3,
-      "DUPLICATE": 1
+      "WHAT": 4,
+      "WHEN": 2,
+      "HISTORY": 2,
+      "DUPLICATE": 1,
+      "INCONSISTENT": 3
     },
     "by_confidence": {
-      "high": 4,
-      "medium": 6,
+      "high": 5,
+      "medium": 5,
       "low": 2
     }
   },
   
   "skipped": [
     {
-      "file": "UserDto.kt",
+      "file": "MydataDto.kt",
       "reason": "data_class_only"
     },
     {
-      "file": "TestUtils.kt",
-      "reason": "test_file"
+      "file": "NotificationService.kt",
+      "reason": "out_of_scope"
     }
   ]
 }
@@ -277,6 +437,7 @@ Do not flag confusion points in:
 | Pure data classes | DTOs, models with no logic |
 | Config files | YAML, JSON, properties (unless complex) |
 | Third-party code | `vendor/`, `node_modules/` |
+| Out-of-scope files | `in_scope: false` in structure.json |
 
 ## Guidelines
 
@@ -286,6 +447,7 @@ Do not flag confusion points in:
 - Confidence < 0.5 means don't include it
 - When in doubt, flag it — interview agent can skip
 - Don't flag well-documented code (good comments = no confusion)
+- For INCONSISTENT: always show what baseline pattern was expected
 
 ## Critical Path Detection
 
@@ -301,10 +463,10 @@ Mark as `critical_path: true` if function touches:
 ## Integration
 
 ### Receives from:
-- **code-analyzer**: `structure.json` (knows where to look)
+- **code-analyzer**: `structure.json` (knows where to look, respects scope)
 
 ### Provides to:
-- **interview-agent**: `confusion_points.json` (what to ask about)
+- **interview-agent**: `confusion_points.json` (what to ask about, scoped)
 - **context-writer**: `confusion_points.json` (documents unasked questions)
 
 ### Does NOT provide:

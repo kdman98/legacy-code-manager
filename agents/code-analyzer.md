@@ -1,6 +1,6 @@
 ---
 name: code-analyzer
-description: Scans repository structure, identifies services/modules, and produces structure.json for downstream agents
+description: Scans repository structure, identifies services/modules, and produces structure.json for downstream agents. Supports optional scoping.
 ---
 
 # Code Analyzer Agent
@@ -16,9 +16,49 @@ You do NOT:
 - Identify confusing code (that's `confusion-detector`)
 - Extract tribal knowledge (that's `interview-agent`)
 
+## Input
+
+### Optional: scope.json
+
+When provided, analyze only the scoped files:
+
+```json
+{
+  "query": { "original": "MydataService and its dependencies" },
+  "anchor": { "file": "MydataService.kt" },
+  "scope": {
+    "files": [
+      { "path": "src/main/kotlin/com/example/mydata/MydataService.kt", "role": "anchor" },
+      { "path": "src/main/kotlin/com/example/mydata/MydataRepository.kt", "role": "downstream" },
+      { "path": "src/main/kotlin/com/example/mydata/MydataController.kt", "role": "upstream" }
+    ]
+  }
+}
+```
+
+**Scoped behavior:**
+- Only analyze files listed in `scope.files`
+- Still detect patterns and dependencies within scope
+- Mark output as scoped for downstream agents
+
+**Unscoped behavior (no scope.json):**
+- Analyze entire codebase
+- Full service/module discovery
+
 ## Analysis Process
 
-### 1. Project Detection
+### 1. Check for Scope
+
+```
+If scope.json exists:
+  file_list = scope.files.map(f => f.path)
+  mode = "scoped"
+Else:
+  file_list = scan_entire_codebase()
+  mode = "unscoped"
+```
+
+### 2. Project Detection
 
 Identify the project type and tech stack:
 
@@ -30,9 +70,9 @@ Identify the project type and tech stack:
 | Language | File extensions, build files (`pom.xml`, `package.json`, `go.mod`, etc.) |
 | Framework | Config files, directory conventions, imports |
 
-### 2. Service/Module Discovery
+### 3. Service/Module Discovery
 
-For each significant component, capture:
+For each significant component (filtered by scope if applicable), capture:
 
 | Field | Description |
 |-------|-------------|
@@ -42,8 +82,9 @@ For each significant component, capture:
 | `entryPoints` | Main files, route handlers, CLI entry points |
 | `keyFiles` | Most important files for understanding this component |
 | `functions` | Public/exported functions with file references |
+| `in_scope` | Boolean - is this within the requested scope? |
 
-### 3. Function Extraction
+### 4. Function Extraction
 
 For each key file, extract functions/methods:
 
@@ -51,6 +92,7 @@ For each key file, extract functions/methods:
 {
   "file": "PaymentService.kt",
   "hash": "a1b2c3d4",
+  "in_scope": true,
   "functions": [
     {
       "name": "processPayment",
@@ -65,7 +107,7 @@ For each key file, extract functions/methods:
 
 **Hash generation**: Use first 8 chars of SHA-256 of file contents. This enables staleness detection by downstream agents.
 
-### 4. Dependency Mapping
+### 5. Dependency Mapping
 
 **Internal dependencies** (service-to-service):
 - Import statements
@@ -78,7 +120,12 @@ For each key file, extract functions/methods:
 - Message queues (Kafka, RabbitMQ, SQS)
 - External APIs (payment gateways, auth providers, etc.)
 
-### 5. Pattern Recognition
+**Scoped dependency behavior:**
+- Still trace dependencies even if target is outside scope
+- Mark out-of-scope dependencies with `"in_scope": false`
+- Helps understand scope boundaries
+
+### 6. Pattern Recognition
 
 Identify conventions in use:
 
@@ -97,6 +144,14 @@ Produce `structure.json`:
   "version": "1.0",
   "generated": "2024-12-26T10:00:00Z",
   
+  "scope_metadata": {
+    "mode": "scoped",
+    "query": "MydataService and its dependencies",
+    "anchor": "MydataService.kt",
+    "scoped_file_count": 6,
+    "total_file_count": 145
+  },
+  
   "project": {
     "name": "payment-service",
     "type": "monolith | microservices | monorepo",
@@ -109,53 +164,70 @@ Produce `structure.json`:
   
   "services": [
     {
-      "name": "payment-core",
-      "path": "src/main/kotlin/com/example/payment",
-      "purpose": "Handles payment processing and retry logic",
+      "name": "mydata",
+      "path": "src/main/kotlin/com/example/mydata",
+      "purpose": "Handles MyData processing and storage",
+      "in_scope": true,
       "entryPoints": [
-        "PaymentController.kt::handlePayment",
-        "PaymentController.kt::handleRefund"
+        "MydataController.kt::handleRequest"
       ],
       "files": [
         {
-          "path": "PaymentService.kt",
+          "path": "MydataService.kt",
           "hash": "a1b2c3d4",
-          "purpose": "Core payment processing logic",
+          "in_scope": true,
+          "scope_role": "anchor",
+          "purpose": "Core MyData processing logic",
           "functions": [
             {
-              "name": "processPayment",
+              "name": "process",
               "visibility": "public",
-              "signature": "suspend fun processPayment(request: PaymentRequest): PaymentResult"
+              "signature": "suspend fun process(request: MydataRequest): MydataResult"
             },
             {
-              "name": "retryWithBackoff",
+              "name": "processWithRetry",
               "visibility": "private",
-              "signature": "suspend fun retryWithBackoff(block: suspend () -> T): T"
+              "signature": "suspend fun processWithRetry(block: suspend () -> T): T"
             }
           ]
         },
         {
-          "path": "PaymentRepository.kt",
+          "path": "MydataRepository.kt",
           "hash": "e5f6g7h8",
-          "purpose": "Database access for payments",
+          "in_scope": true,
+          "scope_role": "downstream",
+          "purpose": "Database access for MyData",
           "functions": [
             {
               "name": "findById",
               "visibility": "public",
-              "signature": "fun findById(id: UUID): Payment?"
-            },
-            {
-              "name": "save",
-              "visibility": "public",
-              "signature": "fun save(payment: Payment): Payment"
+              "signature": "fun findById(id: UUID): Mydata?"
             }
           ]
         }
       ],
       "dependencies": {
-        "internal": ["notification-service", "audit-service"],
-        "external": ["stripe-api", "postgresql"]
+        "internal": [
+          {
+            "service": "notification-service",
+            "in_scope": false
+          },
+          {
+            "service": "audit-service", 
+            "in_scope": false
+          }
+        ],
+        "external": ["postgresql", "redis"]
       }
+    }
+  ],
+  
+  "out_of_scope_references": [
+    {
+      "from": "MydataService.kt",
+      "to": "NotificationService.kt",
+      "type": "import",
+      "note": "Calls notification but NotificationService not in scope"
     }
   ],
   
@@ -177,9 +249,9 @@ Produce `structure.json`:
     "queues": [],
     "externalApis": [
       {
-        "name": "stripe",
-        "clientFile": "StripeClient.kt",
-        "baseUrl": "configurable"
+        "name": "mydata-provider",
+        "clientFile": "MydataClient.kt",
+        "in_scope": true
       }
     ]
   },
@@ -202,18 +274,17 @@ Produce `structure.json`:
   "configFiles": [
     {
       "path": "application.yml",
-      "purpose": "Main Spring configuration"
-    },
-    {
-      "path": "application-prod.yml",
-      "purpose": "Production overrides"
+      "purpose": "Main Spring configuration",
+      "in_scope": true
     }
   ],
   
   "metadata": {
-    "totalFiles": 45,
+    "totalFiles": 145,
+    "scopedFiles": 6,
     "totalFunctions": 234,
-    "analyzedServices": 3
+    "scopedFunctions": 18,
+    "analyzedServices": 1
   }
 }
 ```
@@ -232,6 +303,8 @@ Prioritize files that are:
 | Low | DTOs, models, configs |
 | Skip | Generated code, tests, build artifacts |
 
+**In scoped mode**: All files in scope are "key files" by definition.
+
 ## Directory Skip List
 
 Do not analyze:
@@ -241,15 +314,23 @@ Do not analyze:
 - Generated code directories
 - Test fixtures and mock data
 
-## Guidelines
+## Scoped Analysis Guidelines
 
-- Be thorough but efficient - focus on what downstream agents need
-- Extract function signatures, not implementations
-- Generate consistent hashes for staleness tracking
-- When purpose is unclear, note it as `"purpose": "unclear - needs review"`
-- Flag unusual structures: `"notes": ["unconventional layout", "mixed languages"]`
+When scope.json is provided:
+- Focus analysis depth on scoped files
+- Still note external dependencies (mark as out-of-scope)
+- Preserve scope role metadata (anchor, upstream, downstream, lateral)
+- Keep output compact — skip detailed analysis of out-of-scope services
+
+When scope.json is NOT provided:
+- Full codebase analysis
+- All services marked as `in_scope: true`
+- No `scope_metadata` section
 
 ## Integration
+
+### Receives from:
+- **scope-resolver**: `scope.json` (optional, for filtered analysis)
 
 ### Provides to:
 - **confusion-detector**: `structure.json` (knows where to look for confusion)
