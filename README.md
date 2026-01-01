@@ -1,9 +1,9 @@
-# Legacy Code Manager (Context Capturer)
+# Legacy Code Capturer
 
 A Claude Code plugin that captures tribal knowledge from legacy codebases and developers, generating structured context files for AI coding assistants.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)](https://github.com/kdman98/legacy-code-manager)
+[![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)](https://github.com/kdman98/legacy-context-capturer)
 
 ## The Problem
 
@@ -24,10 +24,10 @@ Context Capturer uses multiple specialized agents to:
 
 ```bash
 # Add the marketplace
-/plugin marketplace add kdman98/legacy-code-manager
+/plugin marketplace add kdman98/legacy-context-capturer
 
 # Install the plugin
-/plugin install legacy-code-manager
+/plugin install legacy-code-capturer
 ```
 
 ## Usage
@@ -234,7 +234,7 @@ Uses callbacks + raw OkHttp (rest of codebase uses coroutines + Retrofit).
 ### Plugin Not Found
 Ensure you've added the marketplace first:
 ```bash
-/plugin marketplace add kdman98/legacy-code-manager
+/plugin marketplace add kdman98/legacy-context-capturer
 ```
 
 ### Commands Not Working
@@ -276,8 +276,8 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/kdman98/legacy-code-manager/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/kdman98/legacy-code-manager/discussions)
+- **Issues**: [GitHub Issues](https://github.com/kdman98/legacy-context-capturer/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/kdman98/legacy-context-capturer/discussions)
 
 ## License
 

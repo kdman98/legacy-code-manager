@@ -1,14 +1,27 @@
 # Changelog
 
-All notable changes to Legacy Code Manager will be documented in this file.
+All notable changes to Legacy Code Capturer will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-01-01
+
+### Changed
+- Updated marketplace.json to latest Claude Code plugin format with best practices
+- Renamed repository from legacy-code-manager to legacy-context-capturer
+- Updated all documentation to reflect new repository name
+- Added author, homepage, repository, license, and category fields to marketplace.json
+- Set strict mode to false for simplified plugin distribution
+
+### Fixed
+- Removed unimplemented command flags from documentation (--skip-interview, --output, --upstream-only, --downstream-only, --format)
+- Corrected installation instructions across all documentation
+
 ## [1.0.0] - 2025-01-01
 
 ### Added
-- Initial release of Legacy Code Manager
+- Initial release of Legacy Code Capturer
 - Core commands: `/capture`, `/analyze`, `/detect-scale`, `/interview`
 - Six specialized agents:
   - `scope-resolver`: Natural language scope parsing

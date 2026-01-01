@@ -1,22 +1,29 @@
 {
-  "name": "legacy-code-manager-marketplace",
+  "name": "legacy-context-capturer",
   "owner": {
     "name": "SF93",
     "email": "kdman98@naver.com"
   },
   "metadata": {
-    "description": "Context Capturer - Capture tribal knowledge from legacy codebases and generate structured context files for AI assistants",
-    "version": "1.0.0"
+    "description": "Marketplace for Legacy Code Capturer - Capture and preserve tribal knowledge from codebases",
+    "version": "1.0.1"
   },
   "plugins": [
     {
-      "name": "legacy-code-manager",
+      "name": "legacy-code-capturer",
       "source": {
         "source": "url",
-        "url": "https://github.com/kdman98/legacy-code-manager.git"
+        "url": "https://github.com/kdman98/legacy-context-capturer.git"
       },
       "description": "Multi-agent tool to capture tribal knowledge, analyze codebases, detect issues, and generate CLAUDE.md context files with natural language scoping",
-      "version": "1.0.0",
+      "version": "1.0.1",
+      "author": {
+        "name": "SF93",
+        "email": "kdman98@naver.com"
+      },
+      "homepage": "https://github.com/kdman98/legacy-context-capturer",
+      "repository": "https://github.com/kdman98/legacy-context-capturer",
+      "license": "MIT",
       "keywords": [
         "codebase-onboarding",
         "legacy-code",
@@ -25,9 +32,11 @@
         "context",
         "tribal-knowledge",
         "scalability-detection",
-        "code-analysis"
+        "code-analysis",
+        "context-capturer"
       ],
-      "strict": true
+      "category": "documentation",
+      "strict": false
     }
   ]
 }

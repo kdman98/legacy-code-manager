@@ -1,6 +1,6 @@
-# Contributing to Legacy Code Manager
+# Contributing to Legacy Code Capturer
 
-Thank you for your interest in contributing to Legacy Code Manager! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Legacy Code Capturer! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -30,8 +30,8 @@ Enhancement suggestions are welcome! Please provide:
 
 1. **Fork and Clone**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/legacy-code-manager.git
-   cd legacy-code-manager
+   git clone https://github.com/YOUR_USERNAME/legacy-context-capturer.git
+   cd legacy-context-capturer
    ```
 
 2. **Create a Branch**
@@ -60,7 +60,7 @@ Enhancement suggestions are welcome! Please provide:
 ### File Structure
 
 ```
-legacy-code-manager/
+legacy-code-capturer/
 ├── .claude-plugin/
 │   └── marketplace.json    # Plugin marketplace configuration
 ├── agents/                 # AI agents (*.md)
